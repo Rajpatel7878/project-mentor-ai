@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8080"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - FIRESTORE_PROJECT_ID=${FIRESTORE_PROJECT_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/firestore.json
+      - CORS_ORIGINS=http://localhost:3000
+      - KNOWLEDGE_DIR=/knowledge
+      - ALLOW_SYSTEM_CONTROL=true
+    volumes:
+      - ./knowledge:/knowledge
+      - ./backend/data:/app/data
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./backend/credentials}:/app/credentials:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_WS_URL: ws://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
