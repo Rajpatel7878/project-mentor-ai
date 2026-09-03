@@ -50,12 +50,12 @@ class GeminiService:
         "analyst": "You are the Analyst Agent — expert in data synthesis, cross-document RAG summarization, executive briefings, and metrics insights.",
     }
 
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: str, model_name: str = "gemini-3.6-flash"):
         self.api_key = api_key
         self.model_name = model_name
         self._model = None
         if api_key:
-            genai.configure(api_key=api_key)
+            genai.configure(api_key=api_key, transport="rest")
             self._model = genai.GenerativeModel(model_name, system_instruction=JARVIS_SYSTEM_PROMPT)
         else:
             logger.warning("Gemini API key not configured.")
