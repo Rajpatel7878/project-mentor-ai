@@ -45,6 +45,9 @@ class GeminiService:
         "pm": "You are the PM Agent — expert in product strategy, roadmaps, sprint planning, and user needs.",
         "marketing": "You are the Marketing Agent — expert in go-to-market strategy, branding, and user acquisition.",
         "vc": "You are the VC Agent — expert in business models, fundraising, market sizing, and investor relations.",
+        "engineer": "You are the Engineer & IoT Agent — expert in hardware automation, device diagnostics, protocols (MQTT/Home Assistant), and system health.",
+        "operations": "You are the Operations & Scheduling Agent — expert in workflow automation, calendar coordination, daily standups, and productivity routines.",
+        "analyst": "You are the Analyst Agent — expert in data synthesis, cross-document RAG summarization, executive briefings, and metrics insights.",
     }
 
     def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash"):
@@ -105,7 +108,10 @@ class GeminiService:
         if not self._model:
             return self._keyword_route(message)
         try:
-            result = self._model.generate_content(f"Classify into ONE agent: mentor, cto, pm, marketing, vc\n\nMessage: {message}\n\nRespond with ONLY the agent name.")
+            result = self._model.generate_content(
+                f"Classify into ONE agent: mentor, cto, pm, marketing, vc, engineer, operations, analyst\n\n"
+                f"Message: {message}\n\nRespond with ONLY the agent name."
+            )
             agent = result.text.strip().lower()
             return agent if agent in self.AGENT_PROMPTS else "mentor"
         except Exception:
@@ -113,6 +119,12 @@ class GeminiService:
 
     def _keyword_route(self, message: str) -> str:
         msg = message.lower()
+        if any(w in msg for w in ["light", "thermostat", "device", "iot", "temperature", "switch", "relay", "lock door", "hardware", "diagnostic"]):
+            return "engineer"
+        if any(w in msg for w in ["schedule", "calendar", "standup", "sprint plan", "meeting", "reminder", "agenda", "break"]):
+            return "operations"
+        if any(w in msg for w in ["synthesize", "analyze document", "summary", "report", "extract", "knowledge base", "research"]):
+            return "analyst"
         if any(w in msg for w in ["code", "architecture", "api", "database", "deploy", "bug", "test"]):
             return "cto"
         if any(w in msg for w in ["feature", "roadmap", "sprint", "task", "priority", "user story"]):

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.agents.mentor_graph import MentorAgentSystem
 from app.config import get_settings
 from app.routers.api import router
+from app.services.device_bridge import DeviceManager
 from app.services.gemini import GeminiService
 from app.services.memory import MemoryService
 from app.services.rag import RAGService
@@ -22,12 +23,13 @@ gemini_service: GeminiService | None = None
 rag_service: RAGService | None = None
 memory_service: MemoryService | None = None
 system_control: SystemControlService | None = None
+device_manager: DeviceManager | None = None
 agent_system: MentorAgentSystem | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global gemini_service, rag_service, memory_service, system_control, agent_system
+    global gemini_service, rag_service, memory_service, system_control, device_manager, agent_system
 
     logger.info("Initializing Project Mentor AI services...")
 
@@ -38,14 +40,16 @@ async def lifespan(app: FastAPI):
         credentials_path=settings.google_application_credentials,
     )
     system_control = SystemControlService(allow_control=settings.allow_system_control)
+    device_manager = DeviceManager()
     agent_system = MentorAgentSystem(
         gemini=gemini_service,
         rag=rag_service,
         memory=memory_service,
         system_control=system_control,
+        device_manager=device_manager,
     )
 
-    logger.info("All services initialized. Mentor AI is online.")
+    logger.info("All services initialized. Mentor AI & Device Bridge are online.")
     yield
     logger.info("Shutting down Project Mentor AI...")
 

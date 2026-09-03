@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+// Speech recognition type definitions for cross-browser compatibility
+type SpeechRecognitionInstance = any;
+type SpeechRecognitionEventInstance = any;
+
 interface UseVoiceOptions {
   onTranscript?: (text: string) => void;
   onWakeWord?: () => void;
@@ -14,11 +18,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isSupported, setIsSupported] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const wakeWords = options.wakeWords || ['hey mentor', 'jarvis'];
 
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
     setIsSupported(true);
@@ -27,7 +32,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
     recognition.interimResults = true;
     recognition.lang = 'en-GB';
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: SpeechRecognitionEventInstance) => {
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
@@ -109,7 +114,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
 declare global {
   interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
   }
 }

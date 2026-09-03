@@ -8,6 +8,9 @@ const AGENT_COLORS: Record<string, string> = {
   pm: 'from-green-500 to-emerald-500',
   marketing: 'from-purple-500 to-pink-500',
   vc: 'from-amber-500 to-orange-500',
+  engineer: 'from-teal-500 to-emerald-600',
+  operations: 'from-orange-500 to-rose-500',
+  analyst: 'from-violet-500 to-purple-600',
 };
 
 const AGENT_LABELS: Record<string, string> = {
@@ -16,6 +19,9 @@ const AGENT_LABELS: Record<string, string> = {
   pm: 'PM',
   marketing: 'MKT',
   vc: 'VC',
+  engineer: 'ENGINEER (IOT)',
+  operations: 'OPERATIONS',
+  analyst: 'ANALYST',
 };
 
 interface AgentBadgeProps {

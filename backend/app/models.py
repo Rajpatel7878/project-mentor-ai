@@ -12,6 +12,9 @@ class AgentType(str, Enum):
     PM = "pm"
     MARKETING = "marketing"
     VC = "vc"
+    ENGINEER = "engineer"
+    OPERATIONS = "operations"
+    ANALYST = "analyst"
 
 
 class MessageRole(str, Enum):
@@ -84,3 +87,66 @@ class ProjectMetrics(BaseModel):
     tasks_completed: int = 0
     project_phase: str = "building"
     last_active: datetime | None = None
+
+
+# --- Device & IoT Models ---
+
+class DeviceType(str, Enum):
+    SYSTEM = "system"
+    LIGHT = "light"
+    THERMOSTAT = "thermostat"
+    SWITCH = "switch"
+    SENSOR = "sensor"
+    LOCK = "lock"
+
+
+class DeviceStatus(str, Enum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    WARNING = "warning"
+
+
+class Device(BaseModel):
+    id: str
+    name: str
+    type: DeviceType
+    status: DeviceStatus = DeviceStatus.ONLINE
+    protocol: str = "local"  # local, mqtt, homeassistant
+    state: dict[str, Any] = Field(default_factory=dict)
+    last_updated: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DeviceActionRequest(BaseModel):
+    action: str  # turn_on, turn_off, toggle, set_level, run_diagnostic
+    params: dict[str, Any] = Field(default_factory=dict)
+    confirm: bool = False
+
+
+class DeviceActionResponse(BaseModel):
+    success: bool
+    message: str
+    device_id: str
+    new_state: dict[str, Any] = Field(default_factory=dict)
+    requires_confirmation: bool = False
+
+
+class TelemetrySnapshot(BaseModel):
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    system: dict[str, Any] = Field(default_factory=dict)
+    devices: list[Device] = Field(default_factory=list)
+
+
+# --- RAG Models ---
+
+class DocumentInfo(BaseModel):
+    name: str
+    size_bytes: int
+    chunk_count: int
+    format: str
+    uploaded_at: str
+
+
+class RAGSearchResponse(BaseModel):
+    query: str
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    retrieval_mode: str = "hybrid"

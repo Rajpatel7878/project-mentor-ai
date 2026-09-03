@@ -1,18 +1,25 @@
-"""API route handlers."""
+"""API route handlers with Device Management and Multi-format RAG support."""
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
 from app.config import Settings, get_settings
 from app.models import (
     ChatRequest,
     ChatResponse,
+    Device,
+    DeviceActionRequest,
+    DeviceActionResponse,
+    DocumentInfo,
     GreetingResponse,
+    RAGSearchResponse,
     SystemCommandRequest,
     SystemCommandResponse,
+    TelemetrySnapshot,
     UserPreferences,
 )
 from app.services.greeting import generate_greeting
@@ -23,20 +30,21 @@ router = APIRouter()
 
 
 def get_services(settings: Settings = Depends(get_settings)):
-    from app.main import agent_system, memory_service, rag_service, system_control
+    from app.main import agent_system, device_manager, memory_service, rag_service, system_control
 
     return {
         "agent": agent_system,
         "memory": memory_service,
         "rag": rag_service,
         "system": system_control,
+        "devices": device_manager,
         "settings": settings,
     }
 
 
 @router.get("/health")
 async def health_check():
-    return {"status": "online", "service": "Project Mentor AI", "version": "1.0.0"}
+    return {"status": "online", "service": "Project Mentor AI", "version": "2.0.0"}
 
 
 @router.get("/greeting", response_model=GreetingResponse)
@@ -86,6 +94,85 @@ async def execute_system_command(request: SystemCommandRequest, services: dict =
     )
 
 
+# --- Device & IoT Management Endpoints ---
+
+@router.get("/devices", response_model=list[Device])
+async def list_devices(services: dict = Depends(get_services)):
+    return services["devices"].list_devices()
+
+
+@router.get("/devices/telemetry", response_model=TelemetrySnapshot)
+async def get_device_telemetry(services: dict = Depends(get_services)):
+    return services["devices"].get_telemetry_snapshot()
+
+
+@router.get("/devices/{device_id}", response_model=Device)
+async def get_device(device_id: str, services: dict = Depends(get_services)):
+    dev = services["devices"].get_device(device_id)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return dev
+
+
+@router.post("/devices/{device_id}/action", response_model=DeviceActionResponse)
+async def execute_device_action(
+    device_id: str, request: DeviceActionRequest, services: dict = Depends(get_services)
+):
+    result = services["devices"].execute_action(
+        device_id=device_id,
+        action=request.action,
+        params=request.params,
+        confirm=request.confirm,
+    )
+    return result
+
+
+# --- Enhanced RAG Endpoints ---
+
+@router.get("/rag/documents", response_model=list[DocumentInfo])
+async def list_rag_documents(services: dict = Depends(get_services)):
+    return services["rag"].list_documents()
+
+
+@router.post("/rag/upload", response_model=DocumentInfo)
+async def upload_rag_document(file: UploadFile = File(...), services: dict = Depends(get_services)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    allowed_exts = [".md", ".txt", ".json", ".pdf"]
+    ext = Path(file.filename).suffix.lower()
+    if ext not in allowed_exts:
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported format '{ext}'. Allowed: {', '.join(allowed_exts)}"
+        )
+
+    content = await file.read()
+    doc_info = services["rag"].ingest_file(file.filename, content)
+    return DocumentInfo(**doc_info)
+
+
+@router.delete("/rag/documents/{filename}")
+async def delete_rag_document(filename: str, services: dict = Depends(get_services)):
+    success = services["rag"].delete_document(filename)
+    return {"status": "deleted" if success else "failed", "filename": filename}
+
+
+@router.post("/rag/refresh")
+async def refresh_rag(services: dict = Depends(get_services)):
+    count = services["rag"].refresh()
+    return {"status": "refreshed", "document_count": count}
+
+
+@router.get("/rag/search", response_model=RAGSearchResponse)
+async def search_knowledge(
+    q: str, top_k: int = 5, mode: str = "hybrid", services: dict = Depends(get_services)
+):
+    results = services["rag"].retrieve(q, top_k=top_k, mode=mode)
+    return RAGSearchResponse(query=q, results=results, retrieval_mode=mode)
+
+
+# --- Memory & Preferences ---
+
 @router.get("/memory/history/{session_id}")
 async def get_history(session_id: str, limit: int = 20, services: dict = Depends(get_services)):
     history = await services["memory"].get_conversation_history(session_id, limit)
@@ -111,17 +198,7 @@ async def get_metrics(services: dict = Depends(get_services)):
     return {"metrics": metrics, "recent_decisions": decisions}
 
 
-@router.post("/rag/refresh")
-async def refresh_rag(services: dict = Depends(get_services)):
-    count = services["rag"].refresh()
-    return {"status": "refreshed", "document_count": count}
-
-
-@router.get("/rag/search")
-async def search_knowledge(q: str, top_k: int = 5, services: dict = Depends(get_services)):
-    results = services["rag"].retrieve(q, top_k)
-    return {"query": q, "results": results}
-
+# --- Proactive Mentorship ---
 
 @router.get("/proactive/standup")
 async def get_standup(session_id: str = "default", services: dict = Depends(get_services)):
@@ -143,6 +220,8 @@ async def create_sprint_plan(goals: str, services: dict = Depends(get_services))
     return {"plan": plan}
 
 
+# --- Real-Time WebSockets with Telemetry Broadcasting ---
+
 class ConnectionManager:
     def __init__(self):
         self.active: list[WebSocket] = []
@@ -156,7 +235,7 @@ class ConnectionManager:
             self.active.remove(websocket)
 
     async def broadcast(self, message: dict):
-        for connection in self.active:
+        for connection in list(self.active):
             try:
                 await connection.send_json(message)
             except Exception:
@@ -168,7 +247,7 @@ manager = ConnectionManager()
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    from app.main import agent_system, memory_service
+    from app.main import agent_system, device_manager, memory_service
 
     await manager.connect(websocket)
     try:
@@ -192,6 +271,22 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
 
                 await websocket.send_json({"type": "response", "payload": result})
+
+            elif msg_type == "device_action":
+                dev_id = data.get("device_id")
+                action = data.get("action")
+                params = data.get("params", {})
+                confirm = data.get("confirm", False)
+                res = device_manager.execute_action(dev_id, action, params, confirm)
+                await websocket.send_json({"type": "device_action_result", "payload": res.model_dump()})
+
+                # Broadcast updated telemetry to active sockets
+                snap = device_manager.get_telemetry_snapshot()
+                await manager.broadcast({"type": "telemetry", "payload": snap.model_dump()})
+
+            elif msg_type == "get_telemetry":
+                snap = device_manager.get_telemetry_snapshot()
+                await websocket.send_json({"type": "telemetry", "payload": snap.model_dump()})
 
             elif msg_type == "greeting":
                 prefs = await memory_service.get_preferences()
