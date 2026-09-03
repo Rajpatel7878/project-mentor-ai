@@ -86,7 +86,20 @@ class GeminiService:
             response = self._model.generate_content("\n".join(prompt_parts))
             return response.text
         except Exception as exc:
-            logger.exception("Gemini generation failed")
+            logger.exception("Gemini generation failed: %s", exc)
+            err_str = str(exc)
+            if "401" in err_str or "invalid authentication" in err_str.lower() or "api_key" in err_str.lower():
+                return (
+                    "Good day, sir. Your Google Gemini API key appears to be invalid or expired (401 Unauthorized).\n\n"
+                    "**To fix this:**\n"
+                    "1. Get a free Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)\n"
+                    "2. Open `backend/.env` and ensure your key begins with `AIzaSy...`:\n"
+                    "   ```env\n"
+                    "   GEMINI_API_KEY=AIzaSyYourActualKeyHere\n"
+                    "   ```\n"
+                    "3. Restart the backend server.\n\n"
+                    "In the meantime, your **IoT Device Bridge**, **System Telemetry**, and **RAG Knowledge Base** are active and operational."
+                )
             return f"I apologize, sir. I encountered an issue: {exc}. Please verify your API key."
 
     async def generate_follow_ups(self, message: str, response: str) -> dict[str, list[str]]:
