@@ -102,6 +102,13 @@ class MentorAgentSystem:
         return {"command_results": all_results}
 
     async def _generate_response(self, state: AgentState) -> dict[str, Any]:
+        # Instant fast-path for direct commands (< 1ms execution response)
+        if state.get("command_results"):
+            messages = [r.get("message") for r in state["command_results"] if r.get("message")]
+            if messages:
+                response = f"At your command, sir. {' '.join(messages)}"
+                return {"response": response}
+
         context_parts = []
 
         # Grounding with RAG
@@ -113,14 +120,6 @@ class MentorAgentSystem:
             if state.get("device_context"):
                 context_parts.append(f"Real-Time Device & Hardware Telemetry:\n{state['device_context']}")
 
-        # Executed command feedback
-        if state.get("command_results"):
-            cmd_summary = "\n".join(
-                f"- {r.get('message', 'Executed action')}: {'Success' if r.get('success') else 'Failed'}"
-                for r in state["command_results"]
-            )
-            context_parts.append(f"System & Device Actions Executed:\n{cmd_summary}")
-
         response = await self.gemini.generate(
             message=state["message"],
             context="\n\n".join(p for p in context_parts if p),
@@ -130,7 +129,11 @@ class MentorAgentSystem:
         return {"response": response}
 
     async def _generate_follow_ups(self, state: AgentState) -> dict[str, Any]:
-        follow_ups = await self.gemini.generate_follow_ups(state["message"], state["response"])
+        follow_ups = await self.gemini.generate_follow_ups(
+            state["message"],
+            state["response"],
+            agent=state.get("agent", "mentor"),
+        )
         return {
             "follow_up_questions": follow_ups.get("follow_up_questions", []),
             "suggestions": follow_ups.get("suggestions", []),

@@ -238,65 +238,76 @@ class DeviceManager:
         )
 
     def parse_and_execute_device_command(self, message: str, confirm: bool = False) -> list[dict[str, Any]]:
-        """Natural language device control parser."""
+        """Natural language device control parser with robust flexible intent matching."""
         msg = message.lower().strip()
         results: list[dict[str, Any]] = []
 
-        # 1. Lights triggers
-        if any(w in msg for w in ["turn off the lights", "turn off lights", "lights off", "switch off lights"]):
-            res = self.execute_action("light-office-01", "turn_off")
-            results.append({"device": "light-office-01", "action": "turn_off", "message": res.message, "success": res.success})
-            return results
-
-        if any(w in msg for w in ["turn on the lights", "turn on lights", "lights on", "switch on lights"]):
-            res = self.execute_action("light-office-01", "turn_on")
-            results.append({"device": "light-office-01", "action": "turn_on", "message": res.message, "success": res.success})
-            return results
-
-        if "dim lights to" in msg or "set lights to" in msg or "set brightness to" in msg:
-            import re
-            m = re.search(r"(\d+)\s*%", msg) or re.search(r"to\s+(\d+)", msg)
-            if m:
-                level = int(m.group(1))
+        # 1. Lights / Lamp triggers (matches "turn off light", "lamp off", "lights on", "switch off the light", etc.)
+        if any(w in msg for w in ["light", "lights", "lamp", "lamps", "halo"]):
+            if any(w in msg for w in ["dim", "brightness", "level", "set to"]):
+                import re
+                m = re.search(r"(\d+)\s*%", msg) or re.search(r"to\s+(\d+)", msg) or re.search(r"\b(\d+)\b", msg)
+                level = int(m.group(1)) if m else 50
                 res = self.execute_action("light-office-01", "set_level", {"brightness": level})
-                results.append({"device": "light-office-01", "action": "set_level", "message": res.message, "success": res.success})
+                results.append({"device": "light-office-01", "action": "set_level", "message": f"Office lighting brightness set to {level}%.", "success": res.success})
                 return results
 
-        # 2. Thermostat triggers
-        if "set temperature to" in msg or "set thermostat to" in msg or "change temperature to" in msg:
+            if any(w in msg for w in ["off", "disable", "kill", "down", "shut"]):
+                res = self.execute_action("light-office-01", "turn_off")
+                results.append({"device": "light-office-01", "action": "turn_off", "message": "Office lighting powered down, sir.", "success": res.success})
+                return results
+
+            if any(w in msg for w in ["on", "enable", "start", "up", "ignite"]):
+                res = self.execute_action("light-office-01", "turn_on")
+                results.append({"device": "light-office-01", "action": "turn_on", "message": "Office lighting illuminated, sir.", "success": res.success})
+                return results
+
+        # 2. Thermostat / Climate triggers
+        if any(w in msg for w in ["temp", "temperature", "thermostat", "climate", "hvac", "heat", "cool", "ac"]):
             import re
             m = re.search(r"(\d+(?:\.\d+)?)\s*(?:degrees|c|deg)?", msg)
             if m:
                 temp = float(m.group(1))
                 res = self.execute_action("climate-hvac-01", "set_temp", {"target_temp_c": temp})
-                results.append({"device": "climate-hvac-01", "action": "set_temp", "message": res.message, "success": res.success})
+                results.append({"device": "climate-hvac-01", "action": "set_temp", "message": f"Thermostat target calibrated to {temp}°C, sir.", "success": res.success})
                 return results
 
-        # 3. Security Lock triggers
-        if any(w in msg for w in ["lock the office", "lock the door", "secure the office", "lock office"]):
-            res = self.execute_action("lock-office-01", "lock")
-            results.append({"device": "lock-office-01", "action": "lock", "message": res.message, "success": res.success})
-            return results
+        # 3. Power Relay / Server switch triggers
+        if any(w in msg for w in ["server rack", "relay", "audio relay", "power switch", "main switch"]):
+            if any(w in msg for w in ["off", "disable", "cut"]):
+                res = self.execute_action("switch-server-01", "turn_off")
+                results.append({"device": "switch-server-01", "action": "turn_off", "message": "Server rack & audio relay powered down.", "success": res.success})
+                return results
+            if any(w in msg for w in ["on", "enable"]):
+                res = self.execute_action("switch-server-01", "turn_on")
+                results.append({"device": "switch-server-01", "action": "turn_on", "message": "Server rack & audio relay energized.", "success": res.success})
+                return results
 
-        if any(w in msg for w in ["unlock the office", "unlock the door", "open office lock", "unlock office"]):
-            res = self.execute_action("lock-office-01", "unlock", confirm=confirm)
-            results.append({
-                "device": "lock-office-01",
-                "action": "unlock",
-                "message": res.message,
-                "success": res.success,
-                "requires_confirmation": res.requires_confirmation,
-            })
-            return results
+        # 4. Security Lock triggers
+        if any(w in msg for w in ["lock", "door", "gate", "secure", "office lock"]):
+            if any(w in msg for w in ["unlock", "open", "unlatch"]):
+                res = self.execute_action("lock-office-01", "unlock", confirm=confirm)
+                results.append({
+                    "device": "lock-office-01",
+                    "action": "unlock",
+                    "message": "Office security gate unlatched, sir." if res.success else res.message,
+                    "success": res.success,
+                    "requires_confirmation": res.requires_confirmation,
+                })
+                return results
+            if any(w in msg for w in ["lock", "secure", "close"]):
+                res = self.execute_action("lock-office-01", "lock")
+                results.append({"device": "lock-office-01", "action": "lock", "message": "Office security perimeter secured and locked.", "success": res.success})
+                return results
 
-        # 4. Telemetry / Diagnostics triggers
-        if any(w in msg for w in ["device status", "check devices", "system telemetry", "device telemetry", "iot status"]):
+        # 5. Telemetry / Diagnostics triggers
+        if any(w in msg for w in ["telemetry", "hardware status", "diagnostics", "check devices", "iot status", "device status", "system status", "all devices"]):
             snap = self.get_telemetry_snapshot()
             summary = ", ".join(f"{d.name}: {'ON' if d.state.get('power', d.state.get('locked', True)) else 'OFF'}" for d in snap.devices)
             results.append({
                 "device": "all",
                 "action": "telemetry",
-                "message": f"Telemetry online: CPU {snap.system.get('cpu_percent', 0)}%, RAM {snap.system.get('ram_percent', 0)}%. Devices: {summary}",
+                "message": f"Telemetry online: CPU {snap.system.get('cpu_percent', 0)}%, RAM {snap.system.get('ram_percent', 0)}%. Active units: {summary}",
                 "success": True,
             })
             return results

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     knowledge_dir: str = "../knowledge"
     chroma_persist_dir: str = "./data/chroma"
     allow_system_control: bool = True
-    gemini_model: str = "gemini-3.6-flash"
+    gemini_model: str = "gemini-flash-latest"
 
     @property
     def cors_origin_list(self) -> list[str]:

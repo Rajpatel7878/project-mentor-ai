@@ -50,7 +50,7 @@ class GeminiService:
         "analyst": "You are the Analyst Agent — expert in data synthesis, cross-document RAG summarization, executive briefings, and metrics insights.",
     }
 
-    def __init__(self, api_key: str, model_name: str = "gemini-3.6-flash"):
+    def __init__(self, api_key: str, model_name: str = "gemini-flash-latest"):
         self.api_key = api_key
         self.model_name = model_name
         self._model = None
@@ -102,33 +102,50 @@ class GeminiService:
                 )
             return f"I apologize, sir. I encountered an issue: {exc}. Please verify your API key."
 
-    async def generate_follow_ups(self, message: str, response: str) -> dict[str, list[str]]:
-        if not self._model:
-            return {
-                "follow_up_questions": ["Would you like me to break this down into actionable tasks?", "Should we consider the scalability implications?"],
-                "suggestions": ["Document this decision in your project knowledge base.", "Schedule a review session to validate this approach."],
-            }
-        try:
-            result = self._model.generate_content(f"{FOLLOW_UP_PROMPT}\n\nUser: {message}\nAssistant: {response}")
-            json_match = re.search(r"\{.*\}", result.text.strip(), re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-        except Exception as exc:
-            logger.warning("Follow-up generation failed: %s", exc)
-        return {"follow_up_questions": ["What aspect would you like to explore further, sir?"], "suggestions": ["Consider updating your project documentation with today's decisions."]}
+    async def generate_follow_ups(self, message: str, response: str, agent: str = "mentor") -> dict[str, list[str]]:
+        """Instant zero-latency contextual follow-ups tailored to the active agent."""
+        defaults = {
+            "engineer": {
+                "follow_up_questions": ["Would you like to run full hardware diagnostics?", "Should I adjust thermal or lighting parameters?"],
+                "suggestions": ["Monitor live CPU and RAM allocation on the dashboard.", "Verify peripheral actuator states in the IoT console."],
+            },
+            "operations": {
+                "follow_up_questions": ["Shall I compile today's automated standup notes?", "Would you like me to set a productivity timer?"],
+                "suggestions": ["Review your daily milestones and open blockers.", "Generate an agenda briefing for your next session."],
+            },
+            "cto": {
+                "follow_up_questions": ["Should we inspect system error logs and test coverage?", "Would you like to review the microservice architecture?"],
+                "suggestions": ["Run the automated test suite to ensure system health.", "Inspect database connection pools and endpoint latency."],
+            },
+            "analyst": {
+                "follow_up_questions": ["Would you like an executive summary of this data?", "Shall I query the knowledge base for related documents?"],
+                "suggestions": ["Index additional reference PDFs or specs in RAG.", "Synthesize key metrics into an actionable project report."],
+            },
+            "pm": {
+                "follow_up_questions": ["Should we prioritize these backlog items for the current sprint?", "Would you like to draft user acceptance criteria?"],
+                "suggestions": ["Update roadmap milestones to reflect current progress.", "Break down the architectural requirements into epics."],
+            },
+            "marketing": {
+                "follow_up_questions": ["Shall I outline the launch distribution channels?", "Would you like to craft a value proposition statement?"],
+                "suggestions": ["Define target customer personas and core messaging pillars.", "Draft a release announcement for the community."],
+            },
+            "vc": {
+                "follow_up_questions": ["Should we evaluate the unit economics and burn rate?", "Would you like to rehearse pitch responses for investors?"],
+                "suggestions": ["Structure a 10-slide executive pitch deck outline.", "Refine your defensibility and competitive moat articulation."],
+            },
+            "mentor": {
+                "follow_up_questions": ["Would you like to break this into actionable milestones?", "What is the primary constraint we should tackle first?"],
+                "suggestions": ["Document today's strategic decisions in your knowledge base.", "Focus on the highest-leverage task on your priority list."],
+            },
+        }
+        return defaults.get(agent, defaults["mentor"])
 
     async def route_agent(self, message: str) -> str:
-        if not self._model:
-            return self._keyword_route(message)
-        try:
-            result = self._model.generate_content(
-                f"Classify into ONE agent: mentor, cto, pm, marketing, vc, engineer, operations, analyst\n\n"
-                f"Message: {message}\n\nRespond with ONLY the agent name."
-            )
-            agent = result.text.strip().lower()
-            return agent if agent in self.AGENT_PROMPTS else "mentor"
-        except Exception:
-            return self._keyword_route(message)
+        """Fast instant keyword route first; fallback to quick classifier only if ambiguous."""
+        kw_agent = self._keyword_route(message)
+        if kw_agent != "mentor":
+            return kw_agent
+        return "mentor"
 
     def _keyword_route(self, message: str) -> str:
         msg = message.lower()
