@@ -5,7 +5,7 @@ start "Mentor Backend" cmd /k "cd /d %~dp0backend && call venv\Scripts\activate.
 
 timeout /t 5 /nobreak >nul
 
-start "Mentor Frontend" cmd /k "cd /d %~dp0frontend && npm install && npm run dev"
+start "Mentor Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
 
 echo.
 echo Project Mentor AI is starting...

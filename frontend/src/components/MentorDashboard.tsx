@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Cpu, Database, Network, Zap } from 'lucide-react';
+import { Bot, Cpu, Database, Network, Zap, Volume2, VolumeX } from 'lucide-react';
 import { ParticleBackground } from './ParticleBackground';
 import { ChatInterface } from './ChatInterface';
 import { VoiceControl } from './VoiceControl';
@@ -13,6 +13,7 @@ import { HitlConfirmationModal } from './HitlConfirmationModal';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useVoice } from '@/hooks/useVoice';
 import { fetchGreeting, fetchMetrics, sendChatMessage, type ChatMessage } from '@/lib/api';
+import { jarvisAudio } from '@/lib/soundEffects';
 
 const SESSION_ID = 'default';
 
@@ -25,6 +26,8 @@ export function MentorDashboard() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [metrics, setMetrics] = useState<Record<string, unknown>>({});
   const [useRestFallback, setUseRestFallback] = useState(false);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  const isVoiceMutedRef = useRef(false);
 
   // HITL State for Chat Commands
   const [hitlModal, setHitlModal] = useState<{
@@ -40,6 +43,21 @@ export function MentorDashboard() {
   const speakRef = useRef<(text: string) => void>(() => {});
   const sendChatRef = useRef<(message: string, sessionId: string) => void>(() => {});
   const isConnectedRef = useRef(false);
+
+  const toggleVoiceMute = useCallback(() => {
+    setIsVoiceMuted((prev) => {
+      const next = !prev;
+      isVoiceMutedRef.current = next;
+      if (next) {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+      } else {
+        jarvisAudio.playBootChime();
+      }
+      return next;
+    });
+  }, []);
 
   const appendAssistantMessage = useCallback(
     (
@@ -58,11 +76,22 @@ export function MentorDashboard() {
           commandResults,
         },
       ]);
-      speakRef.current(content);
+
+      // Trigger audio feedback
+      if (commandResults && commandResults.length > 0) {
+        jarvisAudio.playSuccessChirp();
+      } else {
+        jarvisAudio.playBootChime();
+      }
+
+      if (!isVoiceMutedRef.current) {
+        speakRef.current(content);
+      }
 
       // Check if any command requires HITL confirmation
       const needsConfirm = commandResults?.find((r) => r.requires_confirmation);
       if (needsConfirm) {
+        jarvisAudio.playAlertSound();
         setHitlModal({
           isOpen: true,
           pendingCommand: needsConfirm.message,
@@ -233,12 +262,27 @@ export function MentorDashboard() {
           </button>
         </div>
 
-        {/* System Online Status */}
-        <div className="flex items-center gap-2">
-          <Zap className={`w-4 h-4 ${isConnected ? 'text-green-400' : 'text-red-400'}`} />
-          <span className="text-xs font-display tracking-wider">
-            {isConnected ? 'SYSTEMS ONLINE' : 'OFFLINE MODE'}
-          </span>
+        {/* System Online & Voice Controls */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleVoiceMute}
+            title={isVoiceMuted ? "Jarvis Voice Muted (Click to Enable)" : "Jarvis Voice Active (Click to Mute)"}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-display tracking-wider transition-all ${
+              isVoiceMuted
+                ? 'bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20'
+                : 'bg-cyan-500/10 border-cyan-500/40 text-cyan-glow hover:bg-cyan-500/20 shadow-sm shadow-cyan-500/10'
+            }`}
+          >
+            {isVoiceMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 animate-pulse" />}
+            <span>{isVoiceMuted ? 'VOICE OFF' : 'VOICE ON'}</span>
+          </button>
+
+          <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+            <Zap className={`w-4 h-4 ${isConnected ? 'text-green-400' : 'text-red-400'}`} />
+            <span className="text-xs font-display tracking-wider">
+              {isConnected ? 'SYSTEMS ONLINE' : 'OFFLINE MODE'}
+            </span>
+          </div>
         </div>
       </header>
 

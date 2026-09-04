@@ -75,28 +75,59 @@ export function useVoice(options: UseVoiceOptions = {}) {
     recognitionRef.current?.stop();
   }, []);
 
+function cleanTextForSpeech(raw: string): string {
+  if (!raw) return '';
+  let text = raw;
+  text = text.replace(/```[\s\S]*?```/g, 'Code block omitted.');
+  text = text.replace(/`([^`]+)`/g, '$1');
+  text = text.replace(/!\[.*?\]\(.*?\)/g, '');
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  text = text.replace(/^#{1,6}\s+/gm, '');
+  text = text.replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1');
+  text = text.replace(/^>\s+/gm, '');
+  text = text.replace(/^[-*+]\s+/gm, '');
+  text = text.replace(/^\d+\.\s+/gm, '');
+  text = text.replace(/\n+/g, '. ').replace(/\s+/g, ' ').trim();
+  if (text.length > 350) {
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text.slice(0, 350)];
+    text = sentences.slice(0, 3).join(' ');
+  }
+  return text;
+}
+
   const speak = useCallback((text: string) => {
-    if (!window.speechSynthesis) return;
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
 
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    const clean = cleanTextForSpeech(text);
+    if (!clean) return;
+
+    const utterance = new SpeechSynthesisUtterance(clean);
     utterance.lang = 'en-GB';
-    utterance.rate = 0.95;
-    utterance.pitch = 0.9;
+    utterance.rate = 1.0;
+    utterance.pitch = 0.95;
 
     const voices = window.speechSynthesis.getVoices();
     const britishVoice = voices.find(
-      (v) => v.lang.startsWith('en-GB') || v.name.toLowerCase().includes('british')
+      (v) =>
+        v.lang === 'en-GB' ||
+        v.name.toLowerCase().includes('british') ||
+        v.name.toLowerCase().includes('george') ||
+        v.name.toLowerCase().includes('daniel') ||
+        v.name.toLowerCase().includes('uk english male')
     );
     if (britishVoice) utterance.voice = britishVoice;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
     window.speechSynthesis.speak(utterance);
   }, []);
 
   const stopSpeaking = useCallback(() => {
-    window.speechSynthesis?.cancel();
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     setIsSpeaking(false);
   }, []);
 
