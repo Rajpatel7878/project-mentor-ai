@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
+from app.agents.registry import agent_registry
 from app.config import Settings, get_settings
 from app.models import (
     ChatRequest,
@@ -16,13 +17,17 @@ from app.models import (
     DeviceActionResponse,
     DocumentInfo,
     GreetingResponse,
+    IntakeAnalyzeRequest,
     RAGSearchResponse,
     SystemCommandRequest,
     SystemCommandResponse,
     TelemetrySnapshot,
     UserPreferences,
 )
+from app.services.analytics import analytics_service
 from app.services.greeting import generate_greeting
+from app.services.intake import intake_service
+
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +223,44 @@ async def create_sprint_plan(goals: str, services: dict = Depends(get_services))
     proactive = ProactiveService(gemini_service, memory_service)
     plan = await proactive.generate_sprint_plan(goals)
     return {"plan": plan}
+
+
+# --- Swappable Multi-Agent Registry ---
+
+@router.get("/agents")
+async def list_registered_agents():
+    """List all swappable agent personas registered in the AgentRegistry."""
+    return [agent.to_dict() for agent in agent_registry.list_agents()]
+
+
+# --- Client Intake & Template Recommendation ---
+
+@router.get("/intake/templates")
+async def list_intake_templates():
+    """List available client solution templates (Customer-Facing, Internal Ops, RAG, Multi-Agent)."""
+    return intake_service.list_templates()
+
+
+@router.post("/intake/analyze")
+async def analyze_client_intake(request: IntakeAnalyzeRequest):
+    """Analyze client business requirements and return architecture recommendation and ROI projections."""
+    return intake_service.analyze(request.model_dump())
+
+
+# --- Usage & Cost Analytics Dashboard ---
+
+@router.get("/analytics/usage")
+async def get_usage_analytics():
+    """Get live API call counts, token usage, latency, and estimated cost comparison."""
+    return analytics_service.get_summary()
+
+
+@router.post("/analytics/reset")
+async def reset_usage_analytics():
+    """Reset usage counters for a fresh client demonstration."""
+    analytics_service.reset_metrics()
+    return {"status": "reset", "message": "Usage and cost metrics reset successfully."}
+
 
 
 # --- Real-Time WebSockets with Telemetry Broadcasting ---

@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Cpu, Database, Network, Zap, Volume2, VolumeX } from 'lucide-react';
+import { Bot, Cpu, Database, Network, Zap, Volume2, VolumeX, Sparkles, BarChart3 } from 'lucide-react';
 import { ParticleBackground } from './ParticleBackground';
 import { ChatInterface } from './ChatInterface';
 import { VoiceControl } from './VoiceControl';
 import { Dashboard } from './Dashboard';
 import { DeviceDashboard } from './DeviceDashboard';
 import { KnowledgeManager } from './KnowledgeManager';
+import { ClientIntakeWizard } from './ClientIntakeWizard';
+import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { HitlConfirmationModal } from './HitlConfirmationModal';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useVoice } from '@/hooks/useVoice';
@@ -18,7 +20,8 @@ import { jarvisAudio } from '@/lib/soundEffects';
 const SESSION_ID = 'default';
 
 export function MentorDashboard() {
-  const [activeTab, setActiveTab] = useState<'assistant' | 'devices' | 'knowledge'>('assistant');
+  const [activeTab, setActiveTab] = useState<'assistant' | 'devices' | 'knowledge' | 'intake' | 'analytics'>('assistant');
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [greeting, setGreeting] = useState('');
   const [showGreeting, setShowGreeting] = useState(true);
@@ -260,7 +263,32 @@ export function MentorDashboard() {
             <Database className="w-3.5 h-3.5" />
             KNOWLEDGE (RAG)
           </button>
+
+          <button
+            onClick={() => setActiveTab('intake')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-display tracking-wider transition-all ${
+              activeTab === 'intake'
+                ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            CLIENT INTAKE
+          </button>
+
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-display tracking-wider transition-all ${
+              activeTab === 'analytics'
+                ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            COST & ROI
+          </button>
         </div>
+
 
         {/* System Online & Voice Controls */}
         <div className="flex items-center gap-3">
@@ -334,7 +362,19 @@ export function MentorDashboard() {
         {activeTab === 'devices' && <DeviceDashboard />}
 
         {activeTab === 'knowledge' && <KnowledgeManager />}
+
+        {activeTab === 'intake' && (
+          <ClientIntakeWizard
+            onDeployTemplate={(tpl) => {
+              setActiveTab('assistant');
+              handleSendMessage(`Initialize ${tpl.name} configuration for our workspace.`);
+            }}
+          />
+        )}
+
+        {activeTab === 'analytics' && <AnalyticsDashboard />}
       </main>
+
 
       {/* Voice Control Bar */}
       <footer className="relative z-10 px-6 py-3 border-t border-white/10 glass-panel">

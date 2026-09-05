@@ -166,8 +166,128 @@ export async function searchRAG(query: string, mode: string = 'hybrid'): Promise
   return res.json();
 }
 
+// Swappable Agent Registry APIs
+export interface AgentInfo {
+  name: string;
+  display_name: string;
+  role_description: string;
+  category: string;
+  color_scheme: string;
+  keywords: string[];
+  follow_up_questions: string[];
+  suggestions: string[];
+}
+
+export async function fetchAgents(): Promise<AgentInfo[]> {
+  const res = await fetch(`${API_URL}/api/agents`);
+  if (!res.ok) throw new Error('Failed to fetch registered agents');
+  return res.json();
+}
+
+// Client Intake & Template Recommendation APIs
+export interface ClientTemplate {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  primary_agents: string[];
+  recommended_tools: string[];
+  setup_time: string;
+  monthly_token_estimate: number;
+  gemini_monthly_cost_usd: number;
+  gpt4_monthly_cost_usd: number;
+  key_benefits: string[];
+}
+
+export interface IntakeAnalysisResult {
+  company_name: string;
+  recommended_template: ClientTemplate;
+  fit_score: number;
+  rationale: string;
+  roi_projections: {
+    monthly_tokens: number;
+    gemini_monthly_cost_usd: number;
+    gpt4_equivalent_monthly_usd: number;
+    monthly_savings_usd: number;
+    annual_savings_usd: number;
+    savings_percentage: number;
+  };
+  implementation_roadmap: string[];
+  all_scores: Record<string, number>;
+}
+
+export async function fetchIntakeTemplates(): Promise<ClientTemplate[]> {
+  const res = await fetch(`${API_URL}/api/intake/templates`);
+  if (!res.ok) throw new Error('Failed to fetch intake templates');
+  return res.json();
+}
+
+export async function analyzeIntake(profile: {
+  company_name: string;
+  problem_statement: string;
+  primary_goal?: string;
+  current_tools?: string;
+  team_size?: string;
+}): Promise<IntakeAnalysisResult> {
+  const res = await fetch(`${API_URL}/api/intake/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  });
+  if (!res.ok) throw new Error('Failed to analyze client intake');
+  return res.json();
+}
+
+// Usage & Cost Analytics Dashboard APIs
+export interface AnalyticsSummary {
+  total_calls: number;
+  total_tokens: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  avg_latency_ms: number;
+  total_cost_usd: number;
+  gpt4_equivalent_cost_usd: number;
+  estimated_savings_usd: number;
+  savings_percentage: number;
+  agent_breakdown: Record<
+    string,
+    {
+      calls: number;
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      avg_latency_ms: number;
+      cost_usd: number;
+    }
+  >;
+  model: string;
+  recent_activity: Array<{
+    timestamp: string;
+    agent: string;
+    input_tokens: number;
+    output_tokens: number;
+    latency_ms: number;
+    cost_usd: number;
+    gpt4_cost_usd: number;
+    success: boolean;
+  }>;
+}
+
+export async function fetchUsageAnalytics(): Promise<AnalyticsSummary> {
+  const res = await fetch(`${API_URL}/api/analytics/usage`);
+  if (!res.ok) throw new Error('Failed to fetch usage analytics');
+  return res.json();
+}
+
+export async function resetUsageAnalytics(): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${API_URL}/api/analytics/reset`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to reset usage analytics');
+  return res.json();
+}
+
 export function getWebSocketUrl(): string {
   return `${WS_URL}/api/ws`;
 }
 
 export { API_URL, WS_URL };
+

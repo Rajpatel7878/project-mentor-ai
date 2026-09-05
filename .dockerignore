@@ -1,0 +1,40 @@
+# Git
+.git/
+.gitignore
+
+# Python Virtual Environments & Cache
+backend/venv/
+backend/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+
+# Node & Next.js Build Artifacts
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+**/npm-debug.log*
+
+# Data & Persistence
+backend/data/
+data/
+*.db
+
+# Secrets & Environment Files
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+credentials/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

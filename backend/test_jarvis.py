@@ -10,13 +10,17 @@ from pathlib import Path
 os.environ["ALLOW_SYSTEM_CONTROL"] = "true"
 os.environ["GEMINI_API_KEY"] = ""
 
+from app.agents.mentor_graph import MentorAgentSystem
+from app.agents.registry import AgentRegistry, AgentSpec, agent_registry
 from app.models import DeviceStatus, DeviceType
+from app.services.analytics import AnalyticsService, analytics_service
 from app.services.device_bridge import DeviceManager
 from app.services.gemini import GeminiService
+from app.services.intake import IntakeService, intake_service
 from app.services.memory import MemoryService
 from app.services.rag import RAGService
 from app.services.system_control import SystemControlService
-from app.agents.mentor_graph import MentorAgentSystem
+
 
 
 def test_device_bridge():
@@ -145,8 +149,94 @@ async def test_multi_agent_system():
     print(f"[OK] Agent execution successful: routed to '{response['agent']}'")
     print(f"   Command results count: {len(response['command_results'])}")
     print(f"   Suggestions count: {len(response['suggestions'])}")
+    print(f"   Latency tracked: {response.get('latency_ms')} ms, Cost: ${response.get('cost_usd')}")
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def test_agent_registry():
+    print("\n--- [TEST 4] Swappable Agent Registry ---")
+    reg = AgentRegistry()
+    agents = reg.list_agents()
+    assert len(agents) >= 8
+    print(f"[OK] Built-in agent count: {len(agents)} personas registered")
+
+    # Verify custom agent dynamic registration
+    custom_agent = AgentSpec(
+        name="legal",
+        display_name="Legal & Compliance Officer",
+        role_description="Advises on IP rights, contracts, and regulatory filings.",
+        system_prompt="You are a corporate legal counsel.",
+        keywords=["contract", "nda", "trademark", "patent", "compliance"],
+        default_follow_ups=["Have you signed a mutual NDA?"],
+        default_suggestions=["Draft standard NDA."],
+        category="governance",
+    )
+    reg.register(custom_agent)
+    assert reg.get("legal") is not None
+    assert reg.route("Please review the mutual NDA and patent filing") == "legal"
+    print("[OK] Dynamic agent registration & custom keyword routing verified (Legal agent)")
+
+
+def test_intake_service():
+    print("\n--- [TEST 5] Client Intake & Template Recommendation ---")
+    svc = IntakeService()
+    templates = svc.list_templates()
+    assert len(templates) == 4
+    print(f"[OK] Available solution templates: {len(templates)} verified")
+
+    # Test 1: Document RAG recommendation
+    rag_rec = svc.analyze({
+        "company_name": "Acme Legal Corp",
+        "problem_statement": "We have 500 PDF contracts and compliance manuals that employees cannot search quickly.",
+        "primary_goal": "Search knowledge base instantly",
+    })
+    assert rag_rec["recommended_template"]["id"] == "knowledge_rag"
+    print(f"[OK] Correctly recommended '{rag_rec['recommended_template']['name']}' for document search")
+    print(f"   Fit score: {rag_rec['fit_score']}%, Monthly savings: ${rag_rec['roi_projections']['monthly_savings_usd']}")
+
+    # Test 2: Customer Facing recommendation
+    support_rec = svc.analyze({
+        "company_name": "ShopFast Retail",
+        "problem_statement": "Need a 24/7 customer support chat widget on our website to handle order tracking and ticket triage.",
+        "primary_goal": "Automate client inquiries",
+    })
+    assert support_rec["recommended_template"]["id"] == "customer_facing"
+    print(f"[OK] Correctly recommended '{support_rec['recommended_template']['name']}' for customer support")
+
+
+def test_analytics_service():
+    print("\n--- [TEST 6] Usage, Cost & ROI Analytics ---")
+    tmp_path = Path(tempfile.mkdtemp()) / "usage.json"
+    analytics = AnalyticsService(storage_path=str(tmp_path))
+
+    # Record 3 sample calls
+    entry1 = analytics.record_call(
+        agent="cto",
+        message="Help me architect a distributed cache using Redis",
+        response="Here is a high-availability Redis Sentinel architecture...",
+        latency_ms=125.4,
+    )
+    entry2 = analytics.record_call(
+        agent="marketing",
+        message="Write 3 LinkedIn launch headlines",
+        response="1. Introducing the next generation of AI...",
+        latency_ms=88.2,
+    )
+
+    summary = analytics.get_summary()
+    assert summary["total_calls"] == 2
+    assert summary["total_tokens"] > 0
+    assert summary["total_cost_usd"] > 0
+    assert summary["estimated_savings_usd"] > 0
+    assert "cto" in summary["agent_breakdown"]
+    assert "marketing" in summary["agent_breakdown"]
+
+    print(f"[OK] Recorded 2 calls across CTO & Marketing agents")
+    print(f"   Total tokens: {summary['total_tokens']}, Gemini Cost: ${summary['total_cost_usd']}")
+    print(f"   Estimated GPT-4 Cost: ${summary['gpt4_equivalent_cost_usd']}, Savings: ${summary['estimated_savings_usd']} ({summary['savings_percentage']}%)")
+
+    shutil.rmtree(tmp_path.parent, ignore_errors=True)
 
 
 async def main():
@@ -156,8 +246,12 @@ async def main():
     test_device_bridge()
     test_rag_pipeline()
     await test_multi_agent_system()
+    test_agent_registry()
+    test_intake_service()
+    test_analytics_service()
     print("\n==================================================")
     print("ALL TESTS PASSED SUCCESSFULLY! (100% HEALTH)")
+
     print("==================================================")
 
 

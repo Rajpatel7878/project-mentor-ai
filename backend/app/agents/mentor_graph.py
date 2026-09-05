@@ -1,15 +1,18 @@
 """LangGraph multi-agent orchestration system with IoT Device Bridge and RAG integration."""
 
 import logging
+import time
 from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from app.services.analytics import analytics_service
 from app.services.device_bridge import DeviceManager
 from app.services.gemini import GeminiService
 from app.services.memory import MemoryService
 from app.services.rag import RAGService
 from app.services.system_control import SystemControlService
+
 
 logger = logging.getLogger(__name__)
 
@@ -161,10 +164,28 @@ class MentorAgentSystem:
             "execute_commands": execute_commands,
         }
 
+        start_time = time.time()
         result = await self.graph.ainvoke(initial_state)
+        latency_ms = (time.time() - start_time) * 1000
+
+        agent_name = result.get("agent", "mentor")
+
+        # Record call in analytics service for live cost and token tracking
+        try:
+            call_metric = analytics_service.record_call(
+                agent=agent_name,
+                message=message,
+                response=result.get("response", ""),
+                latency_ms=latency_ms,
+                success=True,
+            )
+            cost_usd = call_metric.get("cost_usd", 0.0)
+        except Exception as exc:
+            logger.warning("Analytics recording skipped: %s", exc)
+            cost_usd = 0.0
 
         await self.memory.save_message(session_id, "user", message)
-        await self.memory.save_message(session_id, "assistant", result["response"], agent=result.get("agent"))
+        await self.memory.save_message(session_id, "assistant", result["response"], agent=agent_name)
 
         metrics = await self.memory.get_metrics()
         await self.memory.update_metrics({"total_conversations": metrics.get("total_conversations", 0) + 1})
@@ -174,10 +195,13 @@ class MentorAgentSystem:
 
         return {
             "response": result["response"],
-            "agent": result.get("agent", "mentor"),
+            "agent": agent_name,
             "session_id": session_id,
             "follow_up_questions": result.get("follow_up_questions", []),
             "suggestions": result.get("suggestions", []),
             "command_results": result.get("command_results", []),
             "rag_context": rag_preview,
+            "latency_ms": round(latency_ms, 1),
+            "cost_usd": cost_usd,
         }
+

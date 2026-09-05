@@ -9,15 +9,16 @@ services:
       - "8000:8080"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - FIRESTORE_PROJECT_ID=${FIRESTORE_PROJECT_ID}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/firestore.json
-      - CORS_ORIGINS=http://localhost:3000
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-latest}
+      - FIRESTORE_PROJECT_ID=${FIRESTORE_PROJECT_ID:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
       - KNOWLEDGE_DIR=/knowledge
+      - CHROMA_PERSIST_DIR=/app/data/chroma
       - ALLOW_SYSTEM_CONTROL=true
     volumes:
       - ./knowledge:/knowledge
       - ./backend/data:/app/data
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-./backend/credentials}:/app/credentials:ro
     restart: unless-stopped
 
   frontend:

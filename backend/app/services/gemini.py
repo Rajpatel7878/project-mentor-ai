@@ -36,29 +36,27 @@ FOLLOW_UP_PROMPT = """Based on this conversation, generate:
 Return as JSON: {"follow_up_questions": [...], "suggestions": [...]}"""
 
 
-class GeminiService:
-    """Wrapper for Google Gemini API."""
+from app.agents.registry import agent_registry
 
-    AGENT_PROMPTS = {
-        "mentor": "You are the Mentor Agent — orchestrate guidance across all domains with wisdom and clarity.",
-        "cto": "You are the CTO Agent — expert in software architecture, code quality, DevOps, and technical decisions.",
-        "pm": "You are the PM Agent — expert in product strategy, roadmaps, sprint planning, and user needs.",
-        "marketing": "You are the Marketing Agent — expert in go-to-market strategy, branding, and user acquisition.",
-        "vc": "You are the VC Agent — expert in business models, fundraising, market sizing, and investor relations.",
-        "engineer": "You are the Engineer & IoT Agent — expert in hardware automation, device diagnostics, protocols (MQTT/Home Assistant), and system health.",
-        "operations": "You are the Operations & Scheduling Agent — expert in workflow automation, calendar coordination, daily standups, and productivity routines.",
-        "analyst": "You are the Analyst Agent — expert in data synthesis, cross-document RAG summarization, executive briefings, and metrics insights.",
-    }
+
+class GeminiService:
+    """Wrapper for Google Gemini API integrated with swappable AgentRegistry."""
 
     def __init__(self, api_key: str, model_name: str = "gemini-flash-latest"):
         self.api_key = api_key
         self.model_name = model_name
         self._model = None
+        self.registry = agent_registry
         if api_key:
             genai.configure(api_key=api_key, transport="rest")
             self._model = genai.GenerativeModel(model_name, system_instruction=JARVIS_SYSTEM_PROMPT)
         else:
             logger.warning("Gemini API key not configured.")
+
+    @property
+    def AGENT_PROMPTS(self) -> dict[str, str]:
+        """Backward compatibility property returning registered agent prompts."""
+        return {spec.name: spec.system_prompt for spec in self.registry.list_agents()}
 
     @property
     def is_available(self) -> bool:
@@ -80,7 +78,9 @@ class GeminiService:
         if history:
             history_text = "\n".join(f"{h.get('role', 'user').upper()}: {h.get('content', '')}" for h in history[-10:])
             prompt_parts.append(f"Conversation History:\n{history_text}\n")
-        prompt_parts.append(f"Agent Mode: {self.AGENT_PROMPTS.get(agent, self.AGENT_PROMPTS['mentor'])}")
+        
+        agent_prompt = self.registry.get_prompt(agent)
+        prompt_parts.append(f"Agent Mode: {agent_prompt}")
         prompt_parts.append(f"User: {message}")
         try:
             response = self._model.generate_content("\n".join(prompt_parts))
@@ -103,67 +103,16 @@ class GeminiService:
             return f"I apologize, sir. I encountered an issue: {exc}. Please verify your API key."
 
     async def generate_follow_ups(self, message: str, response: str, agent: str = "mentor") -> dict[str, list[str]]:
-        """Instant zero-latency contextual follow-ups tailored to the active agent."""
-        defaults = {
-            "engineer": {
-                "follow_up_questions": ["Would you like to run full hardware diagnostics?", "Should I adjust thermal or lighting parameters?"],
-                "suggestions": ["Monitor live CPU and RAM allocation on the dashboard.", "Verify peripheral actuator states in the IoT console."],
-            },
-            "operations": {
-                "follow_up_questions": ["Shall I compile today's automated standup notes?", "Would you like me to set a productivity timer?"],
-                "suggestions": ["Review your daily milestones and open blockers.", "Generate an agenda briefing for your next session."],
-            },
-            "cto": {
-                "follow_up_questions": ["Should we inspect system error logs and test coverage?", "Would you like to review the microservice architecture?"],
-                "suggestions": ["Run the automated test suite to ensure system health.", "Inspect database connection pools and endpoint latency."],
-            },
-            "analyst": {
-                "follow_up_questions": ["Would you like an executive summary of this data?", "Shall I query the knowledge base for related documents?"],
-                "suggestions": ["Index additional reference PDFs or specs in RAG.", "Synthesize key metrics into an actionable project report."],
-            },
-            "pm": {
-                "follow_up_questions": ["Should we prioritize these backlog items for the current sprint?", "Would you like to draft user acceptance criteria?"],
-                "suggestions": ["Update roadmap milestones to reflect current progress.", "Break down the architectural requirements into epics."],
-            },
-            "marketing": {
-                "follow_up_questions": ["Shall I outline the launch distribution channels?", "Would you like to craft a value proposition statement?"],
-                "suggestions": ["Define target customer personas and core messaging pillars.", "Draft a release announcement for the community."],
-            },
-            "vc": {
-                "follow_up_questions": ["Should we evaluate the unit economics and burn rate?", "Would you like to rehearse pitch responses for investors?"],
-                "suggestions": ["Structure a 10-slide executive pitch deck outline.", "Refine your defensibility and competitive moat articulation."],
-            },
-            "mentor": {
-                "follow_up_questions": ["Would you like to break this into actionable milestones?", "What is the primary constraint we should tackle first?"],
-                "suggestions": ["Document today's strategic decisions in your knowledge base.", "Focus on the highest-leverage task on your priority list."],
-            },
-        }
-        return defaults.get(agent, defaults["mentor"])
+        """Instant zero-latency contextual follow-ups from the active agent specification."""
+        return self.registry.get_follow_ups(agent)
 
     async def route_agent(self, message: str) -> str:
-        """Fast instant keyword route first; fallback to quick classifier only if ambiguous."""
-        kw_agent = self._keyword_route(message)
-        if kw_agent != "mentor":
-            return kw_agent
-        return "mentor"
+        """Fast instant keyword router delegating to the swappable AgentRegistry."""
+        return self.registry.route(message)
 
     def _keyword_route(self, message: str) -> str:
-        msg = message.lower()
-        if any(w in msg for w in ["light", "thermostat", "device", "iot", "temperature", "switch", "relay", "lock door", "hardware", "diagnostic"]):
-            return "engineer"
-        if any(w in msg for w in ["schedule", "calendar", "standup", "sprint plan", "meeting", "reminder", "agenda", "break"]):
-            return "operations"
-        if any(w in msg for w in ["synthesize", "analyze document", "summary", "report", "extract", "knowledge base", "research"]):
-            return "analyst"
-        if any(w in msg for w in ["code", "architecture", "api", "database", "deploy", "bug", "test"]):
-            return "cto"
-        if any(w in msg for w in ["feature", "roadmap", "sprint", "task", "priority", "user story"]):
-            return "pm"
-        if any(w in msg for w in ["marketing", "brand", "launch", "social", "campaign", "seo"]):
-            return "marketing"
-        if any(w in msg for w in ["funding", "investor", "revenue", "business model", "pitch", "vc"]):
-            return "vc"
-        return "mentor"
+        """Helper routing method delegating to the swappable AgentRegistry."""
+        return self.registry.route(message)
 
     def get_agent_context(self, agent: str) -> str:
         return self.AGENT_PROMPTS.get(agent, self.AGENT_PROMPTS["mentor"])

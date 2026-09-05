@@ -46,6 +46,17 @@ class ChatResponse(BaseModel):
     suggestions: list[str] = Field(default_factory=list)
     command_results: list[dict[str, Any]] = Field(default_factory=list)
     rag_context: list[str] = Field(default_factory=list)
+    latency_ms: float | None = None
+    cost_usd: float | None = None
+
+
+class IntakeAnalyzeRequest(BaseModel):
+    company_name: str = "Valued Client"
+    problem_statement: str
+    primary_goal: str | None = None
+    current_tools: list[str] | str | None = None
+    team_size: str | None = None
+
 
 
 class SystemCommandRequest(BaseModel):
