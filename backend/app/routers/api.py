@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSock
 from app.agents.registry import agent_registry
 from app.config import Settings, get_settings
 from app.models import (
+    ActionTriggerRequest,
     ChatRequest,
     ChatResponse,
     Device,
@@ -18,15 +19,18 @@ from app.models import (
     DocumentInfo,
     GreetingResponse,
     IntakeAnalyzeRequest,
+    PhoneActionRequest,
     RAGSearchResponse,
     SystemCommandRequest,
     SystemCommandResponse,
     TelemetrySnapshot,
     UserPreferences,
 )
+from app.services.actions import action_workflow_service
 from app.services.analytics import analytics_service
 from app.services.greeting import generate_greeting
 from app.services.intake import intake_service
+
 
 
 logger = logging.getLogger(__name__)
@@ -262,8 +266,69 @@ async def reset_usage_analytics():
     return {"status": "reset", "message": "Usage and cost metrics reset successfully."}
 
 
+# --- Phone Connectivity & Remote Control Endpoints ---
+
+@router.get("/phone/status")
+async def get_phone_status(services: dict = Depends(get_services)):
+    """Get connected smartphone status, battery, ringer, and notifications."""
+    phone = services["devices"].get_device("phone-mobile-01")
+    if not phone:
+        raise HTTPException(status_code=404, detail="Phone device not found")
+    return {
+        "id": phone.id,
+        "name": phone.name,
+        "status": phone.status.value,
+        "state": phone.state,
+        "last_updated": phone.last_updated.isoformat(),
+    }
+
+
+@router.post("/phone/action")
+async def execute_phone_action(request: PhoneActionRequest, services: dict = Depends(get_services)):
+    """Execute action on paired smartphone (ring, lock, notify, flashlight, clipboard, app)."""
+    result = services["devices"].execute_action(
+        device_id="phone-mobile-01",
+        action=request.action,
+        params=request.params,
+        confirm=request.confirm,
+    )
+    return result
+
+
+@router.post("/phone/pair")
+async def pair_phone(services: dict = Depends(get_services)):
+    """Generate mobile pairing session token and companion configuration."""
+    phone = services["devices"].get_device("phone-mobile-01")
+    pair_token = "STARK-PAIR-7878"
+    if phone:
+        phone.state["paired"] = True
+        phone.state["pairing_token"] = pair_token
+    return {
+        "success": True,
+        "pairing_token": pair_token,
+        "device_id": "phone-mobile-01",
+        "qr_data": f"mentor-ai://pair?token={pair_token}&host=localhost:8000",
+        "companion_url": "http://localhost:3000/mobile",
+        "message": "Smartphone companion paired successfully.",
+    }
+
+
+# --- Interactive Guided Action Workflows ---
+
+@router.get("/actions/workflows")
+async def list_action_workflows():
+    """List available guided interactive action workflows."""
+    return action_workflow_service.list_workflows()
+
+
+@router.post("/actions/trigger")
+async def trigger_action_workflow(request: ActionTriggerRequest):
+    """Trigger an interactive action workflow, receiving starter prompt and guiding questions."""
+    return action_workflow_service.trigger_workflow(request.workflow_id, request.user_context)
+
 
 # --- Real-Time WebSockets with Telemetry Broadcasting ---
+
 
 class ConnectionManager:
     def __init__(self):

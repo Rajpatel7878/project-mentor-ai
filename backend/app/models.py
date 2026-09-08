@@ -109,6 +109,8 @@ class DeviceType(str, Enum):
     SWITCH = "switch"
     SENSOR = "sensor"
     LOCK = "lock"
+    PHONE = "phone"
+
 
 
 class DeviceStatus(str, Enum):
@@ -161,3 +163,28 @@ class RAGSearchResponse(BaseModel):
     query: str
     results: list[dict[str, Any]] = Field(default_factory=list)
     retrieval_mode: str = "hybrid"
+
+
+# --- Phone & Interactive Action Models ---
+
+class PhoneActionRequest(BaseModel):
+    action: str  # ring_phone, lock_phone, toggle_flashlight, send_notification, sync_clipboard, launch_app, set_volume, toggle_dnd
+    params: dict[str, Any] = Field(default_factory=dict)
+    confirm: bool = False
+
+
+class ActionWorkflow(BaseModel):
+    id: str
+    title: str
+    tagline: str
+    category: str
+    icon: str
+    assigned_agent: str
+    starter_prompt: str
+    guiding_questions: list[str] = Field(default_factory=list)
+
+
+class ActionTriggerRequest(BaseModel):
+    workflow_id: str
+    user_context: str = ""
+

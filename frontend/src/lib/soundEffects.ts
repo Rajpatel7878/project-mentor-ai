@@ -114,6 +114,59 @@ class JarvisAudio {
     osc.start(now);
     osc.stop(now + 0.25);
   }
+
+  // Futuristic high-tech gesture detection feedback (HUD Target Locked)
+  public playGestureSound() {
+    if (this.isMuted) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, now);
+    osc.frequency.exponentialRampToValueAtTime(2400, now + 0.05);
+
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.08);
+  }
+
+  // Dual-frequency phone ring / locator alarm (Find My Phone)
+  public playPhoneRing() {
+    if (this.isMuted) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    // Ringer burst 1
+    for (let i = 0; i < 3; i++) {
+      const t = now + i * 0.25;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(950, t);
+      osc.frequency.setValueAtTime(1350, t + 0.1);
+
+      gain.gain.setValueAtTime(0.12, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.2);
+    }
+  }
 }
 
 export const jarvisAudio = new JarvisAudio();
+

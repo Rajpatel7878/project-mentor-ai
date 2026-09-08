@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Sparkles, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import { AgentBadge } from './AgentBadge';
 import type { ChatMessage } from '@/lib/api';
 
@@ -16,9 +18,44 @@ interface ChatInterfaceProps {
   followUpQuestions: string[];
 }
 
+const GUIDED_ACTIONS = [
+  {
+    id: 'sprint',
+    label: 'Sprint Planning',
+    icon: '🚀',
+    prompt: 'Jarvis, guide me through our Sprint Planning and ask me the necessary questions to build our task roadmap.',
+  },
+  {
+    id: 'architecture',
+    label: 'Architecture Review',
+    icon: '🛠️',
+    prompt: 'Jarvis, I need a technical architecture review. Please ask me about our system parameters and requirements.',
+  },
+  {
+    id: 'phone',
+    label: 'Ring My Phone',
+    icon: '📱',
+    prompt: 'Jarvis, ring my phone at maximum volume so I can locate it.',
+  },
+  {
+    id: 'pitch',
+    label: 'Pitch Deck Review',
+    icon: '📈',
+    prompt: 'Jarvis, act as our venture capital advisor. Ask me the key questions needed to pressure-test our investor deck.',
+  },
+  {
+    id: 'diagnostic',
+    label: 'System Diagnostic',
+    icon: '🛡️',
+    prompt: 'Jarvis, run a complete diagnostic across our host telemetry, IoT hardware, and cognitive pipelines.',
+  },
+];
+
 export function ChatInterface({ messages, onSend, isThinking, followUpQuestions }: ChatInterfaceProps) {
+  const [showActions, setShowActions] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -126,7 +163,52 @@ export function ChatInterface({ messages, onSend, isThinking, followUpQuestions 
         </div>
       )}
 
+      {/* Interactive Guided Action Triggers */}
+      <div className="px-4 py-2 border-t border-white/5 bg-black/20">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5 text-[10px] font-display font-semibold uppercase tracking-wider text-white/50">
+            <Sparkles className="w-3 h-3 text-cyan-glow" />
+            <span>Interactive Guided Actions</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowActions((prev) => !prev)}
+            className="text-[10px] text-white/40 hover:text-white flex items-center gap-0.5"
+          >
+            <span>{showActions ? 'Hide' : 'Show Actions'}</span>
+            {showActions ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+          </button>
+        </div>
+
+        <AnimatePresence>
+          {showActions && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar"
+            >
+              {GUIDED_ACTIONS.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  disabled={isThinking}
+                  onClick={() => onSend(action.prompt)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 hover:border-cyan-500/40 border border-white/10 text-xs text-white/80 hover:text-white shrink-0 transition-all group"
+                >
+                  <span className="text-sm">{action.icon}</span>
+                  <span className="font-display font-medium text-[11px] group-hover:text-cyan-glow">
+                    {action.label}
+                  </span>
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       <form onSubmit={handleSubmit} className="p-4 border-t border-white/10">
+
         <div className="flex gap-3">
           <input
             ref={inputRef}

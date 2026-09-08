@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Cpu, Database, Network, Zap, Volume2, VolumeX, Sparkles, BarChart3 } from 'lucide-react';
+
+import { Bot, Cpu, Database, Network, Zap, Volume2, VolumeX, Sparkles, BarChart3, Smartphone, Hand } from 'lucide-react';
 import { ParticleBackground } from './ParticleBackground';
 import { ChatInterface } from './ChatInterface';
 import { VoiceControl } from './VoiceControl';
@@ -11,16 +12,21 @@ import { DeviceDashboard } from './DeviceDashboard';
 import { KnowledgeManager } from './KnowledgeManager';
 import { ClientIntakeWizard } from './ClientIntakeWizard';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { PhoneControlDashboard } from './PhoneControlDashboard';
+import { GestureHUD } from './GestureHUD';
 import { HitlConfirmationModal } from './HitlConfirmationModal';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useVoice } from '@/hooks/useVoice';
+import type { GestureEvent } from '@/hooks/useGestureVision';
 import { fetchGreeting, fetchMetrics, sendChatMessage, type ChatMessage } from '@/lib/api';
 import { jarvisAudio } from '@/lib/soundEffects';
 
 const SESSION_ID = 'default';
 
 export function MentorDashboard() {
-  const [activeTab, setActiveTab] = useState<'assistant' | 'devices' | 'knowledge' | 'intake' | 'analytics'>('assistant');
+  const [activeTab, setActiveTab] = useState<'assistant' | 'devices' | 'phone' | 'knowledge' | 'intake' | 'analytics'>('assistant');
+  const [isGestureVisionActive, setIsGestureVisionActive] = useState(false);
+
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [greeting, setGreeting] = useState('');
@@ -185,6 +191,49 @@ export function MentorDashboard() {
 
   speakRef.current = speak;
 
+
+  const tabsList: Array<'assistant' | 'devices' | 'phone' | 'knowledge' | 'intake' | 'analytics'> = [
+    'assistant',
+    'devices',
+    'phone',
+    'knowledge',
+    'intake',
+    'analytics',
+  ];
+
+  const handleGestureTrigger = useCallback(
+    (event: GestureEvent) => {
+      if (event.gesture === 'swipe_right') {
+        setActiveTab((curr) => {
+          const idx = tabsList.indexOf(curr);
+          return tabsList[(idx + 1) % tabsList.length];
+        });
+      } else if (event.gesture === 'swipe_left') {
+        setActiveTab((curr) => {
+          const idx = tabsList.indexOf(curr);
+          return tabsList[(idx - 1 + tabsList.length) % tabsList.length];
+        });
+      } else if (event.gesture === 'open_palm') {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+      } else if (event.gesture === 'fist') {
+        handleSendMessage('lock computer');
+      } else if (event.gesture === 'thumbs_up') {
+        if (hitlModal.isOpen) {
+          setHitlModal((prev) => ({ ...prev, isOpen: false }));
+          handleSendMessage(`confirm ${hitlModal.pendingCommand}`);
+        } else {
+          handleSendMessage('Affirmative, proceed sir.');
+        }
+      } else if (event.gesture === 'peace') {
+        handleSendMessage('Jarvis, report full telemetry briefing');
+      }
+    },
+    [hitlModal.isOpen, hitlModal.pendingCommand, handleSendMessage]
+  );
+
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -253,6 +302,18 @@ export function MentorDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab('phone')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-display tracking-wider transition-all ${
+              activeTab === 'phone'
+                ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            PHONE CONTROL
+          </button>
+
+          <button
             onClick={() => setActiveTab('knowledge')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-display tracking-wider transition-all ${
               activeTab === 'knowledge'
@@ -290,8 +351,21 @@ export function MentorDashboard() {
         </div>
 
 
-        {/* System Online & Voice Controls */}
-        <div className="flex items-center gap-3">
+        {/* System Online, Gesture Vision & Voice Controls */}
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setIsGestureVisionActive((prev) => !prev)}
+            title={isGestureVisionActive ? "Gesture Vision Active (Click to Disable)" : "Gesture Vision Inactive (Click to Enable)"}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-display tracking-wider transition-all ${
+              isGestureVisionActive
+                ? 'bg-cyan-500/20 border-cyan-400 text-cyan-glow shadow-md shadow-cyan-500/20'
+                : 'bg-white/5 border-white/10 text-white/50 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <Hand className={`w-3.5 h-3.5 ${isGestureVisionActive ? 'animate-pulse text-cyan-glow' : ''}`} />
+            <span>{isGestureVisionActive ? 'GESTURE ON' : 'GESTURE OFF'}</span>
+          </button>
+
           <button
             onClick={toggleVoiceMute}
             title={isVoiceMuted ? "Jarvis Voice Muted (Click to Enable)" : "Jarvis Voice Active (Click to Mute)"}
@@ -361,6 +435,8 @@ export function MentorDashboard() {
 
         {activeTab === 'devices' && <DeviceDashboard />}
 
+        {activeTab === 'phone' && <PhoneControlDashboard />}
+
         {activeTab === 'knowledge' && <KnowledgeManager />}
 
         {activeTab === 'intake' && (
@@ -375,6 +451,12 @@ export function MentorDashboard() {
         {activeTab === 'analytics' && <AnalyticsDashboard />}
       </main>
 
+      {/* Gesture HUD Overlay */}
+      <GestureHUD
+        enabled={isGestureVisionActive}
+        onClose={() => setIsGestureVisionActive(false)}
+        onGestureTrigger={handleGestureTrigger}
+      />
 
       {/* Voice Control Bar */}
       <footer className="relative z-10 px-6 py-3 border-t border-white/10 glass-panel">

@@ -239,6 +239,65 @@ def test_analytics_service():
     shutil.rmtree(tmp_path.parent, ignore_errors=True)
 
 
+def test_phone_device():
+    print("\n--- [TEST 7] Phone Device Telemetry & Remote Control ---")
+    dev_mgr = DeviceManager()
+
+    # Verify phone registered in HAL
+    phone = dev_mgr.get_device("phone-mobile-01")
+    assert phone is not None, "Phone companion device must be registered in HAL"
+    assert phone.type == DeviceType.PHONE
+    print(f"[OK] Phone detected: {phone.name}, Battery={phone.state.get('battery_level')}%")
+
+    # Test Find My Phone / Ring trigger
+    ring_res = dev_mgr.execute_action("phone-mobile-01", "ring_phone")
+    assert ring_res.success is True
+    assert ring_res.new_state.get("ringing") is True
+    print("[OK] Phone alarm triggered ('Find My Phone')")
+
+    # Test Stop Ringing
+    stop_ring = dev_mgr.execute_action("phone-mobile-01", "stop_ring")
+    assert stop_ring.success is True
+    assert stop_ring.new_state.get("ringing") is False
+    print("[OK] Phone alarm silenced")
+
+    # Test Flashlight toggle
+    flash_res = dev_mgr.execute_action("phone-mobile-01", "toggle_flashlight")
+    assert flash_res.success is True
+    print(f"[OK] Phone flashlight toggled: state={flash_res.new_state.get('flashlight')}")
+
+    # Test Natural Language parsing for Phone
+    nl_res = dev_mgr.parse_and_execute_device_command("where is my phone, ring it")
+    assert len(nl_res) > 0
+    assert nl_res[0]["action"] == "ring_phone"
+    assert nl_res[0]["success"] is True
+    print("[OK] Natural language parsed 'where is my phone, ring it' -> ring_phone action")
+
+
+def test_action_workflows():
+    print("\n--- [TEST 8] Interactive Guided Action Workflows ('Help by Asking') ---")
+    from app.services.actions import action_workflow_service
+
+    workflows = action_workflow_service.list_workflows()
+    assert len(workflows) >= 5, "Expected at least 5 guided action workflows"
+    print(f"[OK] Registered guided workflows count: {len(workflows)}")
+
+    # Verify key workflows exist
+    workflow_ids = [w.id for w in workflows]
+    assert "sprint_planning" in workflow_ids
+    assert "architecture_review" in workflow_ids
+    assert "pitch_deck_generator" in workflow_ids
+    assert "phone_remote_control" in workflow_ids
+    print("[OK] Verified Sprint Planning, Architecture, Pitch Deck, and Phone workflows")
+
+    # Test triggering a workflow
+    trigger = action_workflow_service.trigger_workflow("sprint_planning")
+    assert trigger is not None
+    assert trigger["assigned_agent"] == "pm"
+    assert len(trigger["guiding_questions"]) >= 2
+    print(f"[OK] Triggered Sprint Planning: assigned to '{trigger['assigned_agent']}', first question: '{trigger['guiding_questions'][0]}'")
+
+
 async def main():
     print("==================================================")
     print("PROJECT MENTOR AI - AUTOMATED VERIFICATION SUITE")
@@ -249,9 +308,10 @@ async def main():
     test_agent_registry()
     test_intake_service()
     test_analytics_service()
+    test_phone_device()
+    test_action_workflows()
     print("\n==================================================")
-    print("ALL TESTS PASSED SUCCESSFULLY! (100% HEALTH)")
-
+    print("ALL 8 TEST SUITES PASSED SUCCESSFULLY! (100% HEALTH)")
     print("==================================================")
 
 

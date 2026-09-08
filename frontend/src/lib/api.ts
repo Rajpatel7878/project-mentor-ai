@@ -285,9 +285,113 @@ export async function resetUsageAnalytics(): Promise<{ status: string; message: 
   return res.json();
 }
 
+// Phone Connectivity & Remote Control APIs
+export interface PhoneNotification {
+  id: string;
+  title: string;
+  text: string;
+  timestamp: string;
+}
+
+export interface PhoneStatus {
+  id: string;
+  name: string;
+  status: 'online' | 'offline' | 'warning';
+  state: {
+    battery_level: number;
+    battery_charging: boolean;
+    screen_locked: boolean;
+    ringing: boolean;
+    ringer_mode: 'normal' | 'vibrate' | 'silent';
+    flashlight: boolean;
+    wifi_ssid: string;
+    cellular_signal: string;
+    paired: boolean;
+    paired_model: string;
+    connection_type: string;
+    clipboard?: string;
+    active_app?: string;
+    volume?: number;
+    dnd?: boolean;
+    notifications: PhoneNotification[];
+  };
+  last_updated: string;
+}
+
+export async function fetchPhoneStatus(): Promise<PhoneStatus> {
+  const res = await fetch(`${API_URL}/api/phone/status`);
+  if (!res.ok) throw new Error('Failed to fetch phone status');
+  return res.json();
+}
+
+export async function executePhoneAction(
+  action: string,
+  params: Record<string, any> = {},
+  confirm: boolean = false
+): Promise<DeviceActionResponse> {
+  const res = await fetch(`${API_URL}/api/phone/action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, params, confirm }),
+  });
+  if (!res.ok) throw new Error(`Phone action failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function pairPhone(): Promise<{
+  success: boolean;
+  pairing_token: string;
+  device_id: string;
+  qr_data: string;
+  companion_url: string;
+  message: string;
+}> {
+  const res = await fetch(`${API_URL}/api/phone/pair`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to pair phone');
+  return res.json();
+}
+
+// Interactive Guided Action Workflow APIs
+export interface ActionWorkflow {
+  id: string;
+  title: string;
+  tagline: string;
+  category: string;
+  icon: string;
+  assigned_agent: string;
+  starter_prompt: string;
+  guiding_questions: string[];
+}
+
+export async function fetchActionWorkflows(): Promise<ActionWorkflow[]> {
+  const res = await fetch(`${API_URL}/api/actions/workflows`);
+  if (!res.ok) throw new Error('Failed to fetch action workflows');
+  return res.json();
+}
+
+export async function triggerActionWorkflow(
+  workflowId: string,
+  userContext: string = ''
+): Promise<{
+  workflow_id: string;
+  title: string;
+  assigned_agent: string;
+  starter_prompt: string;
+  guiding_questions: string[];
+}> {
+  const res = await fetch(`${API_URL}/api/actions/trigger`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflow_id: workflowId, user_context: userContext }),
+  });
+  if (!res.ok) throw new Error('Failed to trigger action workflow');
+  return res.json();
+}
+
 export function getWebSocketUrl(): string {
   return `${WS_URL}/api/ws`;
 }
 
 export { API_URL, WS_URL };
+
 

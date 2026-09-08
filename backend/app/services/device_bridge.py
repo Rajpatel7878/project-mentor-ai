@@ -102,6 +102,48 @@ class DeviceManager:
             last_updated=datetime.utcnow(),
         )
 
+        # 6. Smartphone Companion & ADB Bridge
+        self._devices["phone-mobile-01"] = Device(
+            id="phone-mobile-01",
+            name="Stark Mobile (Smartphone Companion)",
+            type=DeviceType.PHONE,
+            status=DeviceStatus.ONLINE,
+            protocol="websocket",  # websocket, adb, qr-companion
+            state={
+                "battery_level": 84,
+                "battery_charging": True,
+                "screen_locked": True,
+                "ringing": False,
+                "ringer_mode": "normal",  # normal, vibrate, silent
+                "flashlight": False,
+                "wifi_ssid": "Stark_Secure_5G",
+                "cellular_signal": "strong",
+                "paired": True,
+                "paired_model": "Android / iOS Device",
+                "connection_type": "WebSocket & ADB Bridge",
+                "clipboard": "",
+                "active_app": "Home",
+                "volume": 75,
+                "dnd": False,
+                "notifications": [
+                    {
+                        "id": "notif-1",
+                        "title": "Calendar Reminder",
+                        "text": "Sprint Planning review in 30 minutes",
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                    {
+                        "id": "notif-2",
+                        "title": "GitHub",
+                        "text": "Pull Request #42 approved by CTO",
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                ],
+            },
+            last_updated=datetime.utcnow(),
+        )
+
+
     def _refresh_system_metrics(self):
         """Update host telemetry metrics."""
         dev = self._devices.get("sys-pc-01")
@@ -205,8 +247,137 @@ class DeviceManager:
             elif action == "unlock":
                 device.state["locked"] = False
 
+        # Smartphone Companion Actions
+        elif device.type == DeviceType.PHONE:
+            if action in ["ring_phone", "find_phone", "ring"]:
+                device.state["ringing"] = True
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Ringing {device.name} at maximum volume (Find My Phone active).",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action in ["stop_ring", "silence"]:
+                device.state["ringing"] = False
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Silenced alarm on {device.name}.",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action in ["lock_phone", "lock"]:
+                device.state["screen_locked"] = True
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Locked {device.name} display.",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action in ["unlock_phone", "unlock"]:
+                if not confirm:
+                    return DeviceActionResponse(
+                        success=False,
+                        message=f"Confirmation required to unlock remote device: {device.name}",
+                        device_id=device_id,
+                        new_state=device.state,
+                        requires_confirmation=True,
+                    )
+                device.state["screen_locked"] = False
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Unlocked {device.name}.",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action == "toggle_flashlight":
+                device.state["flashlight"] = not device.state.get("flashlight", False)
+                status_str = "ON" if device.state["flashlight"] else "OFF"
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Turned {device.name} flashlight {status_str}.",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action == "send_notification":
+                params = params or {}
+                notif_text = params.get("text", params.get("message", "Alert from Project Mentor AI"))
+                notif_title = params.get("title", "Project Mentor AI")
+                new_notif = {
+                    "id": f"notif-{len(device.state.get('notifications', [])) + 1}",
+                    "title": notif_title,
+                    "text": notif_text,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+                device.state.setdefault("notifications", []).append(new_notif)
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Push notification dispatched to {device.name}: '{notif_text}'.",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action == "sync_clipboard":
+                params = params or {}
+                text = params.get("text", "")
+                device.state["clipboard"] = text
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Clipboard synced to {device.name} ({len(text)} chars).",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action == "launch_app":
+                params = params or {}
+                app_name = params.get("app", "Home")
+                device.state["active_app"] = app_name
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Launched {app_name} on {device.name}.",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action == "set_volume":
+                params = params or {}
+                vol = params.get("volume", params.get("level", 75))
+                device.state["volume"] = max(0, min(100, int(vol)))
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Adjusted {device.name} volume to {device.state['volume']}%.",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+            elif action == "toggle_dnd":
+                device.state["dnd"] = not device.state.get("dnd", False)
+                mode_str = "ENABLED" if device.state["dnd"] else "DISABLED"
+                device.last_updated = datetime.utcnow()
+                return DeviceActionResponse(
+                    success=True,
+                    message=f"Do Not Disturb mode {mode_str} on {device.name}.",
+                    device_id=device_id,
+                    new_state=device.state,
+                    requires_confirmation=False,
+                )
+
         # Diagnostic Action for any device
         elif action == "run_diagnostic":
+
             device.status = DeviceStatus.ONLINE
             device.last_updated = datetime.utcnow()
             return DeviceActionResponse(
@@ -300,7 +471,69 @@ class DeviceManager:
                 results.append({"device": "lock-office-01", "action": "lock", "message": "Office security perimeter secured and locked.", "success": res.success})
                 return results
 
-        # 5. Telemetry / Diagnostics triggers
+        # 5. Smartphone triggers
+        if any(w in msg for w in ["phone", "mobile", "smartphone", "cell"]):
+            if any(w in msg for w in ["ring", "find", "locate", "where"]):
+                res = self.execute_action("phone-mobile-01", "ring_phone")
+                results.append({
+                    "device": "phone-mobile-01",
+                    "action": "ring_phone",
+                    "message": "Initiating high-frequency ringer on your smartphone, sir (Find My Phone active).",
+                    "success": res.success,
+                })
+                return results
+            if any(w in msg for w in ["silence", "stop ring", "stop alarm"]):
+                res = self.execute_action("phone-mobile-01", "stop_ring")
+                results.append({
+                    "device": "phone-mobile-01",
+                    "action": "stop_ring",
+                    "message": "Smartphone alarm silenced, sir.",
+                    "success": res.success,
+                })
+                return results
+            if any(w in msg for w in ["lock", "secure"]):
+                res = self.execute_action("phone-mobile-01", "lock_phone")
+                results.append({
+                    "device": "phone-mobile-01",
+                    "action": "lock_phone",
+                    "message": "Smartphone display locked and secured.",
+                    "success": res.success,
+                })
+                return results
+            if any(w in msg for w in ["flashlight", "torch"]):
+                res = self.execute_action("phone-mobile-01", "toggle_flashlight")
+                status = "illuminated" if res.new_state.get("flashlight") else "extinguished"
+                results.append({
+                    "device": "phone-mobile-01",
+                    "action": "toggle_flashlight",
+                    "message": f"Smartphone flashlight {status}, sir.",
+                    "success": res.success,
+                })
+                return results
+            if any(w in msg for w in ["battery", "charge", "status"]):
+                phone = self.get_device("phone-mobile-01")
+                batt = phone.state.get("battery_level", 84) if phone else 84
+                charging = "charging" if (phone and phone.state.get("battery_charging")) else "discharging"
+                wifi = phone.state.get("wifi_ssid", "Stark_Secure_5G") if phone else "Stark_Secure_5G"
+                results.append({
+                    "device": "phone-mobile-01",
+                    "action": "status",
+                    "message": f"Smartphone telemetry: Battery at {batt}% ({charging}), Wi-Fi connected to {wifi}.",
+                    "success": True,
+                })
+                return results
+            if "notify" in msg or "notification" in msg:
+                clean_txt = msg.replace("send notification to phone", "").replace("notify phone", "").strip()
+                res = self.execute_action("phone-mobile-01", "send_notification", {"text": clean_txt or "Priority Alert from Jarvis"})
+                results.append({
+                    "device": "phone-mobile-01",
+                    "action": "send_notification",
+                    "message": f"Push notification sent to your phone: '{clean_txt or 'Priority Alert'}'.",
+                    "success": res.success,
+                })
+                return results
+
+        # 6. Telemetry / Diagnostics triggers
         if any(w in msg for w in ["telemetry", "hardware status", "diagnostics", "check devices", "iot status", "device status", "system status", "all devices"]):
             snap = self.get_telemetry_snapshot()
             summary = ", ".join(f"{d.name}: {'ON' if d.state.get('power', d.state.get('locked', True)) else 'OFF'}" for d in snap.devices)
@@ -313,3 +546,4 @@ class DeviceManager:
             return results
 
         return results
+
