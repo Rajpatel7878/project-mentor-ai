@@ -152,7 +152,6 @@ Queries are automatically classified and routed via score-based relevance in `Ag
 - `POST /api/rag/upload` — Ingest `.md`, `.txt`, `.json`, or `.pdf` file.
 - `DELETE /api/rag/documents/{filename}` — Remove document and purge vectors.
 - `GET /api/rag/search?q={query}` — Perform hybrid semantic + keyword search.
-
 ---
 
 ## Automated Verification Suite
@@ -168,7 +167,6 @@ backend\venv\Scripts\python.exe backend/test_jarvis.py
 4. Swappable Agent Registry & Custom Personas
 5. Client Intake & Template Recommendation
 6. Usage, Cost & ROI Analytics
-
 ---
 
 ## Client Demonstration
